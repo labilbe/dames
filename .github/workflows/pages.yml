@@ -44,9 +44,15 @@ jobs:
           node -e '
           const fs = require("fs");
           const root = "publish/wwwroot";
-          const html = fs.readFileSync(root + "/index.html", "utf8");
+          // On ignore le <base>, les liens absolus et les chemins de dossier : on ne
+          // veut que les fichiers que la page va réellement télécharger.
+          const html = fs.readFileSync(root + "/index.html", "utf8").replace(/<base [^>]*>/g, "");
           const refs = new Set();
-          for (const m of html.matchAll(/(?:src|href)="((?!https?:|\.\/?$)[^"]+)"/g)) refs.add(m[1]);
+          for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
+            const ref = m[1];
+            if (/^(https?:|\/\/|#|\.$)/.test(ref) || ref.endsWith("/")) continue;
+            refs.add(ref);
+          }
           const map = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
           if (!map || !map[1].trim()) throw new Error("carte d\x27import absente d\x27index.html");
           for (const v of Object.values(JSON.parse(map[1]).imports || {})) refs.add(v.replace(/^\.\//, ""));
