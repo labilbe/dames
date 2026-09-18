@@ -36,6 +36,25 @@ jobs:
           cp publish/wwwroot/index.html publish/wwwroot/404.html
           touch publish/wwwroot/.nojekyll
 
+      # Les noms des fichiers du runtime portent une empreinte que le SDK réécrit dans
+      # index.html. Une référence oubliée ne casse pas la publication : elle laisse la
+      # page bloquée sur l'écran d'amorçage. On vérifie donc avant de déployer.
+      - name: Check every asset referenced by the page was published
+        run: |
+          node -e '
+          const fs = require("fs");
+          const root = "publish/wwwroot";
+          const html = fs.readFileSync(root + "/index.html", "utf8");
+          const refs = new Set();
+          for (const m of html.matchAll(/(?:src|href)="((?!https?:|\.\/?$)[^"]+)"/g)) refs.add(m[1]);
+          const map = html.match(/<script type="importmap">([\s\S]*?)<\/script>/);
+          if (!map || !map[1].trim()) throw new Error("carte d\x27import absente d\x27index.html");
+          for (const v of Object.values(JSON.parse(map[1]).imports || {})) refs.add(v.replace(/^\.\//, ""));
+          const missing = [...refs].filter(r => !fs.existsSync(root + "/" + r.replace(/^\//, "")));
+          if (missing.length) throw new Error("références absentes du site publié : " + missing.join(", "));
+          console.log(refs.size + " références vérifiées.");
+          '
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: publish/wwwroot

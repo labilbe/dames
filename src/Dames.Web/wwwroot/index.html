@@ -14,6 +14,11 @@
 
     <link rel="stylesheet" href="app#[.{fingerprint}].css" />
     <link rel="icon" type="image/png" href="favicon.png" />
+
+    <!-- Remplies à la publication par le SDK : préchargement du runtime, puis
+         correspondance entre les noms de modules et leurs fichiers empreints. -->
+    <link rel="preload" id="webassembly" />
+    <script type="importmap"></script>
 </head>
 
 <body>
