@@ -1,7 +1,7 @@
 # Dames
 
 Jeu de **dames internationales** (damier 10×10) en C# / .NET 10 : un moteur de règles complet,
-une IA alpha-bêta à quatre niveaux, et une interface console.
+une IA alpha-bêta à quatre niveaux, une interface graphique Blazor WebAssembly et une interface console.
 
 ```
      a   b   c   d   e   f   g   h   i   j
@@ -17,7 +17,20 @@ une IA alpha-bêta à quatre niveaux, et une interface console.
    +---+---+---+---+---+---+---+---+---+---+
 ```
 
-## Démarrer
+## Jouer dans le navigateur
+
+```bash
+dotnet run --project src/Dames.Web
+```
+
+Tout tourne côté client : le moteur et l'IA sont compilés en WebAssembly, il n'y a pas de serveur
+de jeu. On clique une pièce pour voir ses coups ; une rafle s'annonce avant d'être jouée, avec son
+chemin en laiton et une croix sur chaque pièce qu'elle emporte. Quand plusieurs chemins prennent le
+même nombre de pièces, on choisit le sien en cliquant les cases l'une après l'autre.
+
+Le damier se retourne tout seul pour que votre camp soit toujours en bas.
+
+## Jouer dans le terminal
 
 ```bash
 dotnet run --project src/Dames.Cli
@@ -86,12 +99,24 @@ En pratique, le niveau Expert atteint la profondeur 11 en 6 secondes depuis la p
 
 ```
 src/Dames.Core    moteur : damier, génération des coups, état de partie, évaluation, recherche
+src/Dames.Web     interface graphique Blazor WebAssembly
 src/Dames.Cli     interface console
 tests/Dames.Core.Tests   52 tests (règles, perft, nulles, notation, IA)
 ```
 
-`Dames.Core` ne dépend de rien d'autre que du framework : il est réutilisable tel quel derrière
-une autre interface (web, desktop, service).
+`Dames.Core` ne dépend de rien d'autre que du framework : les deux interfaces le consomment tel
+quel, et une troisième (bureau, service) n'aurait rien à réécrire.
+
+Côté web, `GameSession` fait le pont : il tient la sélection en cours, le relevé et l'identité des
+pièces affichées, de sorte qu'une pièce soit animée de case en case plutôt que redessinée. Le
+navigateur n'ayant qu'un fil d'exécution, les temps de réflexion y sont raccourcis et une seule
+boucle de jeu de l'ordinateur tourne à la fois.
+
+### Déploiement
+
+Le workflow `.github/workflows/pages.yml` publie `src/Dames.Web` sur GitHub Pages à chaque poussée
+sur `main`. Il faut que Pages soit activé sur le dépôt avec « GitHub Actions » comme source ; sur un
+compte gratuit, cela suppose un dépôt public.
 
 ## Développer
 
@@ -112,6 +137,6 @@ Assert.Equal("32x23x12", Assert.Single(moves).ToNotation());
 
 ## Pistes
 
-- Interface graphique (Blazor ou Avalonia) par-dessus `Dames.Core`.
 - Import/export de parties au format PDN.
+- Moteur en bitboards sur 50 cases, pour gagner un ordre de grandeur en vitesse de recherche.
 - Bibliothèque d'ouvertures et tables de finales.

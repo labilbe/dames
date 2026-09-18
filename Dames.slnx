@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Dames.Cli/Dames.Cli.csproj" />
     <Project Path="src/Dames.Core/Dames.Core.csproj" />
+    <Project Path="src/Dames.Web/Dames.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Dames.Core.Tests/Dames.Core.Tests.csproj" />

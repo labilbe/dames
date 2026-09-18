@@ -1,0 +1,259 @@
+@using Dames.Core
+@using Dames.Web.Game
+@implements IDisposable
+
+<PageTitle>Dames</PageTitle>
+
+<div class="room">
+    <header class="masthead">
+        <h1 class="masthead__title">Dames</h1>
+        <p class="masthead__note">Règles internationales, damier de 10 sur 10.</p>
+    </header>
+
+    <main class="table">
+        <section class="stage">
+            <div class="board @(_session.ShowNumbers ? null : "board--bare")">
+                <div class="board__grid">
+                    @for (int viewRow = 0; viewRow < Squares.Size; viewRow++)
+                    {
+                        for (int viewCol = 0; viewCol < Squares.Size; viewCol++)
+                        {
+                            int row = _session.ViewRow(viewRow);
+                            int col = _session.ViewCol(viewCol);
+                            int index = Squares.Index(row, col);
+
+                            if (!Squares.IsPlayable(row, col))
+                            {
+                                <div class="cell cell--light" aria-hidden="true"></div>
+                                continue;
+                            }
+
+                            <button type="button"
+                                    class="cell cell--dark @CellState(index)"
+                                    disabled="@(!_session.IsHumanTurn || _session.Busy)"
+                                    aria-label="@CellLabel(index)"
+                                    @onclick="@(() => _session.ClickAsync(index))">
+                                <span class="cell__number">@Squares.NumberOf(index)</span>
+                            </button>
+                        }
+                    }
+                </div>
+
+                <div class="board__pieces" aria-hidden="true">
+                    @foreach (PieceView piece in _session.Pieces)
+                    {
+                        <div @key="piece.Id"
+                             class="piece @(piece.Owner == Player.White ? "piece--white" : "piece--black") @(piece.IsKing ? "piece--king" : null) @(piece.Captured ? "piece--taken" : null)"
+                             style="--r:@_session.ViewRow(piece.Row); --c:@_session.ViewCol(piece.Col)"></div>
+                    }
+                </div>
+            </div>
+
+            <div class="tally">
+                <span class="tally__side">
+                    <span class="chip chip--white"></span>
+                    Blancs, @_session.WhiteCount pièces
+                </span>
+                <span class="tally__side">
+                    <span class="chip chip--black"></span>
+                    Noirs, @_session.BlackCount pièces
+                </span>
+            </div>
+        </section>
+
+        <aside class="rail">
+            <div class="turn @(_session.Result.IsOver() ? "turn--over" : null)" aria-live="polite">
+                <span class="turn__mark @(_session.SideToMove == Player.White ? "turn__mark--white" : "turn__mark--black")"></span>
+                <span class="turn__text">@StatusLine()</span>
+                @if (Hint() is string hint)
+                {
+                    <span class="turn__hint">@hint</span>
+                }
+            </div>
+
+            <div class="panel">
+                <div class="seat">
+                    <span class="seat__name">Blancs</span>
+                    @foreach (Seat seat in Seats)
+                    {
+                        <button type="button"
+                                class="pill @(_session.WhiteSeat == seat ? "pill--on" : null)"
+                                @onclick="@(() => _session.SetSeatAsync(Player.White, seat))">
+                            @SeatName(seat)
+                        </button>
+                    }
+                </div>
+                <div class="seat">
+                    <span class="seat__name">Noirs</span>
+                    @foreach (Seat seat in Seats)
+                    {
+                        <button type="button"
+                                class="pill @(_session.BlackSeat == seat ? "pill--on" : null)"
+                                @onclick="@(() => _session.SetSeatAsync(Player.Black, seat))">
+                            @SeatName(seat)
+                        </button>
+                    }
+                </div>
+
+                @if (_session.WhiteSeat == Seat.Computer || _session.BlackSeat == Seat.Computer)
+                {
+                    <label class="field">
+                        <span class="field__name">Niveau de l'ordinateur</span>
+                        <select value="@_session.Difficulty"
+                                @onchange="OnDifficultyChanged">
+                            @foreach (Difficulty level in Levels)
+                            {
+                                <option value="@level">@SearchOptions.ToFrench(level)</option>
+                            }
+                        </select>
+                    </label>
+                }
+
+                <label class="check">
+                    <input type="checkbox" checked="@_session.ShowNumbers" @onchange="OnNumbersToggled" />
+                    <span>Numéroter les cases</span>
+                </label>
+
+                <div class="actions">
+                    <button type="button" class="button" disabled="@(!_session.CanUndo)" @onclick="_session.Undo">
+                        Annuler le coup
+                    </button>
+                    <button type="button" class="button button--strong" disabled="@_session.Busy" @onclick="_session.NewGameAsync">
+                        Nouvelle partie
+                    </button>
+                </div>
+            </div>
+
+            <div class="record">
+                <h2 class="record__name">Relevé</h2>
+                @if (_session.History.Count == 0)
+                {
+                    <p class="record__empty">Aux Blancs de commencer. Cliquez une pièce pour voir ses coups.</p>
+                }
+                else
+                {
+                    <ol class="record__list">
+                        @for (int i = 0; i < _session.History.Count; i += 2)
+                        {
+                            <li class="record__turn">
+                                <span class="record__number">@(i / 2 + 1)</span>
+                                <span class="record__move">@_session.History[i].Notation</span>
+                                <span class="record__move">@(i + 1 < _session.History.Count ? _session.History[i + 1].Notation : string.Empty)</span>
+                            </li>
+                        }
+                    </ol>
+                }
+            </div>
+        </aside>
+    </main>
+</div>
+
+@code {
+    private static readonly Seat[] Seats = [Seat.Human, Seat.Computer];
+
+    private static readonly Difficulty[] Levels =
+        [Difficulty.Easy, Difficulty.Medium, Difficulty.Hard, Difficulty.Expert];
+
+    private readonly GameSession _session = new();
+
+    protected override void OnInitialized() => _session.Changed += Redraw;
+
+    public void Dispose() => _session.Changed -= Redraw;
+
+    private void Redraw() => InvokeAsync(StateHasChanged);
+
+    private Task OnDifficultyChanged(ChangeEventArgs args) =>
+        Enum.TryParse(args.Value?.ToString(), out Difficulty level)
+            ? _session.SetDifficultyAsync(level)
+            : Task.CompletedTask;
+
+    private void OnNumbersToggled(ChangeEventArgs args) =>
+        _session.ShowNumbers = args.Value is true;
+
+    private static string SeatName(Seat seat) => seat == Seat.Human ? "Vous" : "Ordinateur";
+
+    private string CellState(int index)
+    {
+        var classes = new List<string>(3);
+
+        if (_session.Origin == index)
+        {
+            classes.Add("is-origin");
+        }
+
+        if (_session.Landings.Contains(index))
+        {
+            classes.Add("is-landing");
+        }
+
+        if (_session.Doomed.Contains(index))
+        {
+            classes.Add("is-doomed");
+        }
+
+        if (_session.LastMove is (int from, int to) && (index == from || index == to))
+        {
+            classes.Add("is-last");
+        }
+
+        return string.Join(' ', classes);
+    }
+
+    private string CellLabel(int index)
+    {
+        int number = Squares.NumberOf(index);
+        string occupant = _session.Pieces.FirstOrDefault(p => !p.Captured
+            && Squares.Index(p.Row, p.Col) == index) switch
+        {
+            null => "case libre",
+            { Owner: Player.White, IsKing: false } => "pion blanc",
+            { Owner: Player.White } => "dame blanche",
+            { IsKing: false } => "pion noir",
+            _ => "dame noire",
+        };
+
+        string action = _session.Landings.Contains(index) ? ", arrivée possible" : string.Empty;
+        return $"Case {number}, {occupant}{action}";
+    }
+
+    private string StatusLine()
+    {
+        if (_session.Result.IsOver())
+        {
+            return _session.Result switch
+            {
+                GameResult.WhiteWins => "Les Blancs gagnent",
+                GameResult.BlackWins => "Les Noirs gagnent",
+                _ => "Partie nulle",
+            };
+        }
+
+        if (_session.IsThinking)
+        {
+            return "L'ordinateur réfléchit";
+        }
+
+        string side = _session.SideToMove == Player.White ? "Blancs" : "Noirs";
+        return _session.SeatOf(_session.SideToMove) == Seat.Human
+            ? $"Aux {side}, à vous de jouer"
+            : $"Aux {side}";
+    }
+
+    private string? Hint()
+    {
+        if (_session.Result.IsOver() || _session.IsThinking)
+        {
+            return null;
+        }
+
+        int forced = _session.ForcedCaptureCount;
+        if (forced == 0)
+        {
+            return null;
+        }
+
+        return forced == 1
+            ? "Prise obligatoire"
+            : $"Prise obligatoire, {forced} pièces à enlever";
+    }
+}
