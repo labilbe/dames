@@ -1,4 +1,5 @@
 using Dames.Core;
+using Dames.Core.Pdn;
 
 namespace Dames.Web.Game;
 
@@ -60,6 +61,9 @@ public sealed class GameSession
     /// </summary>
     public bool Flipped => BlackSeat == Seat.Human && WhiteSeat == Seat.Computer;
 
+    /// <summary>Vrai si la partie a commencé par un coup des Noirs, ce qui décale le relevé.</summary>
+    public bool OpensWithBlack => _state.StartingSide == Player.Black;
+
     /// <summary>Ligne d'affichage d'une ligne du damier, orientation comprise.</summary>
     public int ViewRow(int row) => Flipped ? Squares.Size - 1 - row : row;
 
@@ -107,6 +111,49 @@ public sealed class GameSession
         Changed?.Invoke();
         await RunComputerAsync();
     }
+
+    /// <summary>La partie en cours au format PDN, prête à être copiée ou enregistrée.</summary>
+    public string ToPdn() => PdnFile.Write(_state, [
+        new PdnTag("Event", "Partie amicale"),
+        new PdnTag("Site", "Dames, dans le navigateur"),
+        new PdnTag("White", SeatName(Player.White)),
+        new PdnTag("Black", SeatName(Player.Black)),
+    ]);
+
+    /// <summary>
+    /// Remplace la partie en cours par celle décrite en PDN. En cas de texte invalide,
+    /// la partie en cours n'est pas touchée et le message d'erreur explique où ça coince.
+    /// </summary>
+    public async Task<string?> ImportPdnAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "Collez d'abord un PDN.";
+        }
+
+        PdnGame game;
+        try
+        {
+            game = PdnFile.Parse(text);
+        }
+        catch (PdnException error)
+        {
+            return error.Message;
+        }
+        catch (ArgumentException error)
+        {
+            return error.Message;
+        }
+
+        _generation++;
+        Load(game.ToGameState());
+        Changed?.Invoke();
+        await RunComputerAsync();
+        return null;
+    }
+
+    private string SeatName(Player player) =>
+        SeatOf(player) == Seat.Human ? "Humain" : $"Ordinateur ({SearchOptions.ToFrench(Difficulty)})";
 
     public async Task SetSeatAsync(Player player, Seat seat)
     {
@@ -225,15 +272,27 @@ public sealed class GameSession
         return new SearchEngine(SearchOptions.For(difficulty) with { TimeLimit = limit });
     }
 
-    private void Reset()
+    private void Reset() => Load(new GameState());
+
+    /// <summary>Prend une partie comme état courant et reconstruit tout ce que l'affichage en tire.</summary>
+    private void Load(GameState state)
     {
-        _state = new GameState();
+        _state = state;
+
         _history.Clear();
-        LastMove = null;
+        foreach (Move move in state.History)
+        {
+            _history.Add(new MoveRecord(PlayerOfPly(state, _history.Count), move.ToNotation(), move.CaptureCount, move.Promotes));
+        }
+
+        LastMove = state.History.Count > 0 ? (state.History[^1].From, state.History[^1].To) : null;
         RebuildPieces();
         ClearSelection();
         Refresh();
     }
+
+    private static Player PlayerOfPly(GameState state, int ply) =>
+        ply % 2 == 0 ? state.StartingSide : state.StartingSide.Opponent();
 
     private void RebuildPieces()
     {

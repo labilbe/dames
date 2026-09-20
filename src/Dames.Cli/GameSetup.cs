@@ -10,7 +10,7 @@ public enum Seat
 }
 
 /// <summary>Configuration d'une partie, lue sur la ligne de commande ou demandée interactivement.</summary>
-public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bool ShowNumbers)
+public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bool ShowNumbers, string? PdnToOpen = null)
 {
     /// <summary>
     /// Analyse les arguments. Renvoie <c>null</c> si l'aide a été demandée ou si un argument est invalide.
@@ -32,6 +32,7 @@ public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bo
         Seat black = Seat.Computer;
         Difficulty difficulty = Difficulty.Medium;
         bool showNumbers = true;
+        string? pdnToOpen = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -53,6 +54,15 @@ public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bo
                 case "--sans-numeros":
                     showNumbers = false;
                     break;
+                case "--ouvrir":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("--ouvrir attend le chemin d'un fichier PDN.");
+                        return null;
+                    }
+
+                    pdnToOpen = args[++i];
+                    break;
                 case "--niveau":
                     if (i + 1 >= args.Length || !TryParseDifficulty(args[++i], out difficulty))
                     {
@@ -67,7 +77,7 @@ public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bo
             }
         }
 
-        return new GameSetup(white, black, difficulty, showNumbers);
+        return new GameSetup(white, black, difficulty, showNumbers, pdnToOpen);
     }
 
     public static void PrintUsage()
@@ -86,6 +96,7 @@ public sealed record GameSetup(Seat White, Seat Black, Difficulty Difficulty, bo
               --humain-vs-humain    Deux joueurs sur le même clavier
               --ia-vs-ia            Démonstration : l'ordinateur joue les deux camps
               --niveau <n>          facile | moyen | difficile | expert (défaut : moyen)
+              --ouvrir <fichier>    Reprend une partie enregistrée au format PDN
               --sans-numeros        Masque les numéros des cases vides
               -h, --help            Affiche cette aide
             """);

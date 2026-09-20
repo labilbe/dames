@@ -15,6 +15,8 @@ public sealed class GameState
 
     private readonly Stack<UndoInfo> _undo = new();
     private readonly Dictionary<ulong, int> _repetitions = [];
+    private readonly List<Move> _played = [];
+    private readonly Board _startingBoard;
     private ulong _hash;
 
     public GameState()
@@ -26,11 +28,22 @@ public sealed class GameState
     {
         Board = board;
         SideToMove = sideToMove;
+        StartingSide = sideToMove;
+        _startingBoard = board.Clone();
         _hash = Zobrist.Compute(board, sideToMove);
         _repetitions[_hash] = 1;
     }
 
     public Board Board { get; }
+
+    /// <summary>Le damier tel qu'il était au premier coup de la partie.</summary>
+    public Board StartingBoard => _startingBoard.Clone();
+
+    /// <summary>Le camp qui avait le trait au début de la partie.</summary>
+    public Player StartingSide { get; }
+
+    /// <summary>Les coups joués depuis le début de la partie, dans l'ordre.</summary>
+    public IReadOnlyList<Move> History => _played;
 
     public Player SideToMove { get; private set; }
 
@@ -77,6 +90,7 @@ public sealed class GameState
 
         var undo = new UndoInfo(move, moved, capturedPieces, PliesWithoutProgress, _hash);
         _undo.Push(undo);
+        _played.Add(move);
 
         PliesWithoutProgress = move.IsCapture || moved.IsMan() ? 0 : PliesWithoutProgress + 1;
         SideToMove = SideToMove.Opponent();
@@ -95,6 +109,7 @@ public sealed class GameState
     {
         UndoInfo undo = _undo.Pop();
         Move move = undo.Move;
+        _played.RemoveAt(_played.Count - 1);
 
         int count = _repetitions.GetValueOrDefault(_hash);
         if (count <= 1)

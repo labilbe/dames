@@ -1,6 +1,7 @@
 @using Dames.Core
 @using Dames.Web.Game
-@implements IDisposable
+@implements IAsyncDisposable
+@inject IJSRuntime Js
 
 <PageTitle>Dames</PageTitle>
 
@@ -132,16 +133,47 @@
                 }
                 else
                 {
+                    int offset = _session.OpensWithBlack ? 1 : 0;
+
                     <ol class="record__list">
-                        @for (int i = 0; i < _session.History.Count; i += 2)
+                        @for (int i = 0; i < _session.History.Count + offset; i += 2)
                         {
                             <li class="record__turn">
                                 <span class="record__number">@(i / 2 + 1)</span>
-                                <span class="record__move">@_session.History[i].Notation</span>
-                                <span class="record__move">@(i + 1 < _session.History.Count ? _session.History[i + 1].Notation : string.Empty)</span>
+                                <span class="record__move">@MoveAt(i - offset)</span>
+                                <span class="record__move">@MoveAt(i + 1 - offset)</span>
                             </li>
                         }
                     </ol>
+                }
+            </div>
+
+            <div class="panel">
+                <h2 class="record__name">Partie au format PDN</h2>
+
+                @if (_pdnBox is null)
+                {
+                    <div class="actions actions--three">
+                        <button type="button" class="button" @onclick="CopyPdn">Copier</button>
+                        <button type="button" class="button" @onclick="DownloadPdn">Enregistrer</button>
+                        <button type="button" class="button" @onclick="OpenImport">Ouvrir…</button>
+                    </div>
+                }
+                else
+                {
+                    <textarea class="pdn" rows="7" spellcheck="false"
+                              placeholder="Collez ici le PDN d'une partie."
+                              @bind="_pdnBox" @bind:event="oninput"></textarea>
+
+                    <div class="actions">
+                        <button type="button" class="button" @onclick="CloseImport">Annuler</button>
+                        <button type="button" class="button button--strong" @onclick="ImportPdn">Ouvrir la partie</button>
+                    </div>
+                }
+
+                @if (_pdnMessage is string message)
+                {
+                    <p class="notice @(_pdnFailed ? "notice--bad" : null)">@message</p>
                 }
             </div>
         </aside>
@@ -156,11 +188,84 @@
 
     private readonly GameSession _session = new();
 
+    private IJSObjectReference? _helpers;
+    private string? _pdnBox;
+    private string? _pdnMessage;
+    private bool _pdnFailed;
+
     protected override void OnInitialized() => _session.Changed += Redraw;
 
-    public void Dispose() => _session.Changed -= Redraw;
+    public async ValueTask DisposeAsync()
+    {
+        _session.Changed -= Redraw;
+
+        if (_helpers is not null)
+        {
+            try
+            {
+                await _helpers.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // La page se ferme : le module est déjà parti avec elle.
+            }
+        }
+    }
 
     private void Redraw() => InvokeAsync(StateHasChanged);
+
+    private string MoveAt(int index) =>
+        index >= 0 && index < _session.History.Count ? _session.History[index].Notation : string.Empty;
+
+    private async Task<IJSObjectReference> HelpersAsync() =>
+        _helpers ??= await Js.InvokeAsync<IJSObjectReference>("import", "./app.js");
+
+    private async Task CopyPdn()
+    {
+        IJSObjectReference helpers = await HelpersAsync();
+        bool copied = await helpers.InvokeAsync<bool>("copyText", _session.ToPdn());
+        Report(copied ? "PDN copié." : "Le navigateur a refusé l'accès au presse-papiers.", failed: !copied);
+    }
+
+    private async Task DownloadPdn()
+    {
+        IJSObjectReference helpers = await HelpersAsync();
+        await helpers.InvokeVoidAsync("downloadText", "partie.pdn", _session.ToPdn());
+        Report("Partie enregistrée dans partie.pdn.", failed: false);
+    }
+
+    private void OpenImport()
+    {
+        _pdnBox = string.Empty;
+        _pdnMessage = null;
+    }
+
+    private void CloseImport()
+    {
+        _pdnBox = null;
+        _pdnMessage = null;
+    }
+
+    private async Task ImportPdn()
+    {
+        string? error = await _session.ImportPdnAsync(_pdnBox ?? string.Empty);
+
+        if (error is null)
+        {
+            _pdnBox = null;
+            Report($"Partie ouverte, {_session.History.Count} demi-coups rejoués.", failed: false);
+        }
+        else
+        {
+            Report(error, failed: true);
+        }
+    }
+
+    private void Report(string message, bool failed)
+    {
+        _pdnMessage = message;
+        _pdnFailed = failed;
+    }
 
     private Task OnDifficultyChanged(ChangeEventArgs args) =>
         Enum.TryParse(args.Value?.ToString(), out Difficulty level)

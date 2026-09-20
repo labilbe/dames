@@ -565,3 +565,37 @@ input {
         animation: none;
     }
 }
+
+/* --- échange de parties -------------------------------------------------- */
+
+.actions--three {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.pdn {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--baize-edge);
+    border-radius: 2px;
+    background: var(--baize);
+    color: var(--ink);
+    font-size: 12px;
+    font-variation-settings: "wdth" 88;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+    resize: vertical;
+}
+
+.pdn::placeholder {
+    color: var(--ink-faint);
+}
+
+.notice {
+    margin: 2px 0 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+}
+
+.notice--bad {
+    color: var(--brass);
+}

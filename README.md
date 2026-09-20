@@ -28,7 +28,9 @@ de jeu. On clique une pièce pour voir ses coups ; une rafle s'annonce avant d'�
 chemin en laiton et une croix sur chaque pièce qu'elle emporte. Quand plusieurs chemins prennent le
 même nombre de pièces, on choisit le sien en cliquant les cases l'une après l'autre.
 
-Le damier se retourne tout seul pour que votre camp soit toujours en bas.
+Le damier se retourne tout seul pour que votre camp soit toujours en bas. Le panneau
+« Partie au format PDN » copie la partie en cours, l'enregistre en `.pdn`, ou en ouvre une autre
+que l'on colle.
 
 ## Jouer dans le terminal
 
@@ -50,11 +52,51 @@ dotnet run --project src/Dames.Cli -- --ia-vs-ia --niveau expert --sans-numeros
 | `--humain-vs-humain` | Deux joueurs sur le même clavier |
 | `--ia-vs-ia` | Démonstration, l'ordinateur joue les deux camps |
 | `--niveau <n>` | `facile`, `moyen`, `difficile`, `expert` |
+| `--ouvrir <fichier>` | Reprend une partie enregistrée au format PDN |
 | `--sans-numeros` | Masque les numéros des cases vides |
 
 Pendant la partie, on saisit les coups en **notation officielle** : `32-28` pour un déplacement,
-`32x23` pour une prise, `32x23x12` pour détailler une rafle. Les commandes `coups`, `annuler`
-et `quitter` sont disponibles à tout moment.
+`32x23` pour une prise, `32x23x12` pour détailler une rafle. Les commandes `coups`, `annuler`,
+`enregistrer`, `ouvrir` et `quitter` sont disponibles à tout moment.
+
+## Échanger des parties : le PDN
+
+Le PDN (*Portable Draughts Notation*) est au jeu de dames ce que le PGN est aux échecs.
+Une partie exportée se relit dans n'importe quel logiciel de dames, et inversement.
+
+```
+[Event "Championnat"]
+[Site "?"]
+[Date "2026.09.20"]
+[Round "-"]
+[White "Dupont"]
+[Black "Martin"]
+[Result "1-0"]
+[GameType "20"]
+
+1. 32-28 19-23 2. 28x19 14x23 1-0
+```
+
+En console :
+
+```bash
+dotnet run --project src/Dames.Cli -- --ouvrir partie.pdn
+```
+
+et, en cours de partie, les commandes `enregistrer [fichier]` et `ouvrir <fichier>`.
+
+Ce qui est pris en charge : les en-têtes du sept-tag roster, `GameType "20"` (les autres variantes
+sont refusées avec un message explicite), les positions de départ non standard via `SetUp` et `FEN`,
+plusieurs parties dans un même fichier, les commentaires `{…}` et `;…`, les variantes `(…)` et les
+annotations `$n` — ignorés à la lecture — ainsi que les résultats en points de match (`2-0`, `1-1`)
+utilisés par les fédérations à côté des `1-0` / `1/2-1/2` de la norme.
+
+Une subtilité propre aux dames : la norme écrit une rafle `départ x arrivée`, sans les cases
+intermédiaires. Or deux rafles différentes peuvent relier les deux mêmes cases en emportant des
+pièces différentes — par exemple, depuis `W:K42 B:17,K27,29,32,K37,41`, les coups `42x31x18x34` et
+`42x26x12x34` s'écriraient tous deux `42x34`. Dans ce cas seulement, l'écriture détaille le chemin
+complet : c'est la seule façon de rendre le fichier relisible sans ambiguïté, et la lecture accepte
+les deux formes.
 
 ## Règles implémentées
 
@@ -101,7 +143,7 @@ En pratique, le niveau Expert atteint la profondeur 11 en 6 secondes depuis la p
 src/Dames.Core    moteur : damier, génération des coups, état de partie, évaluation, recherche
 src/Dames.Web     interface graphique Blazor WebAssembly
 src/Dames.Cli     interface console
-tests/Dames.Core.Tests   52 tests (règles, perft, nulles, notation, IA)
+tests/Dames.Core.Tests   74 tests (règles, perft, nulles, notation, PDN, IA)
 ```
 
 `Dames.Core` ne dépend de rien d'autre que du framework : les deux interfaces le consomment tel
@@ -137,6 +179,5 @@ Assert.Equal("32x23x12", Assert.Single(moves).ToNotation());
 
 ## Pistes
 
-- Import/export de parties au format PDN.
 - Moteur en bitboards sur 50 cases, pour gagner un ordre de grandeur en vitesse de recherche.
 - Bibliothèque d'ouvertures et tables de finales.
